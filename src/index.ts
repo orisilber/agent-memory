@@ -14,6 +14,7 @@ async function main(): Promise<void> {
     maxMemoryContentChars: config.maxMemoryContentChars,
     maxCheckpointContentChars: config.maxCheckpointContentChars,
     sessionRetentionDays: config.sessionRetentionDays,
+    searchBypassMaxScopeSize: config.searchBypassMaxScopeSize,
   });
   await repository.cleanupExpired();
   const cleanupTimer = setInterval(

@@ -24,6 +24,11 @@ const configSchema = z.object({
     .positive()
     .default(12_000),
   SESSION_RETENTION_DAYS: z.coerce.number().int().positive().default(2),
+  SEARCH_BYPASS_MAX_SCOPE_SIZE: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(50),
 });
 
 export type Config = {
@@ -36,6 +41,7 @@ export type Config = {
   maxMemoryContentChars: number;
   maxCheckpointContentChars: number;
   sessionRetentionDays: number;
+  searchBypassMaxScopeSize: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -51,5 +57,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxMemoryContentChars: parsed.MAX_MEMORY_CONTENT_CHARS,
     maxCheckpointContentChars: parsed.MAX_CHECKPOINT_CONTENT_CHARS,
     sessionRetentionDays: parsed.SESSION_RETENTION_DAYS,
+    searchBypassMaxScopeSize: parsed.SEARCH_BYPASS_MAX_SCOPE_SIZE,
   };
 }

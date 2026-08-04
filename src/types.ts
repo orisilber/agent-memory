@@ -73,6 +73,17 @@ export type MemorySearchResult = MemoryRecord & {
   trigramScore: number;
 };
 
+export type MemorySearchResponse = {
+  results: MemorySearchResult[];
+  /** Active memories in the searched scopes before the query filter. */
+  scopeTotal: number;
+  /**
+   * False when the scope was small enough to return in full, so results are
+   * scope-wide rather than query matches.
+   */
+  matchFilterApplied: boolean;
+};
+
 export type UsageCounter = {
   metric: UsageMetric;
   count: number;

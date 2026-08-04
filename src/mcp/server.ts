@@ -108,7 +108,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     {
       title: "Search memories",
       description:
-        "Search explicit memory scopes for preferences, procedures, decisions, or facts. Choose scopes deliberately; repo scope needs repoId, session scope needs sessionId. Search never broadens scope silently.",
+        "Search explicit memory scopes for preferences, procedures, decisions, or facts. Choose scopes deliberately; repo scope needs repoId, session scope needs sessionId. Search never broadens scope silently. Every response reports scopeTotal, the number of memories the scopes hold; when a scope is small enough the whole scope is returned ranked and matchFilterApplied is false, so treat results as scope context rather than query matches.",
       inputSchema: {
         query: z.string().trim().min(1).max(500),
         scopes: z
@@ -123,18 +123,28 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     },
     async ({ query, scopes, sessionId, repoId, kind, tags, limit }) => {
       try {
-        const results = await repository.searchMemories({
-          query,
-          scopes,
-          context: { sessionId, repoId },
-          ...(kind ? { kind } : {}),
-          ...(tags ? { tags } : {}),
-          limit,
-        });
+        const { results, scopeTotal, matchFilterApplied } =
+          await repository.searchMemories({
+            query,
+            scopes,
+            context: { sessionId, repoId },
+            ...(kind ? { kind } : {}),
+            ...(tags ? { tags } : {}),
+            limit,
+          });
         return textResult({
           query,
           scopes,
           count: results.length,
+          scopeTotal,
+          matchFilterApplied,
+          ...(results.length === 0 && scopeTotal > 0
+            ? {
+                note:
+                  `No memory matched this query, but the searched scopes hold ${scopeTotal} ` +
+                  "memories. Retry with domain keywords or list the scope before assuming nothing is stored.",
+              }
+            : {}),
           results,
         });
       } catch (error: unknown) {
@@ -149,7 +159,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     {
       title: "Store memory",
       description:
-        "Store an explicit preference, stable procedure, decision, or fact. Search first and choose one scope. Service redacts detected secrets; do not store credentials, tokens, raw logs, or transient chatter.",
+        "Store an explicit preference, stable procedure, decision, or fact. Search first and choose one scope. Service redacts detected secrets and adds canonical domain tags derived from title and content; do not store credentials, tokens, raw logs, or transient chatter.",
       inputSchema: {
         scope: scopeTypeSchema,
         ...contextShape,

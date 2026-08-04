@@ -11,10 +11,12 @@ const databaseUrl =
   process.env.DATABASE_URL ??
   "postgresql://memory:memory@localhost:5433/agent_memory";
 const ownerId = `test-${randomUUID()}`;
+const bypassOwnerId = `test-bypass-${randomUUID()}`;
 const pool = createPool(databaseUrl);
 const repository = new MemoryRepository(pool, ownerId, {
   maxMemoryContentChars: 12_000,
   maxCheckpointContentChars: 12_000,
+  searchBypassMaxScopeSize: 0,
 });
 
 suite("MemoryRepository integration", () => {
@@ -23,11 +25,17 @@ suite("MemoryRepository integration", () => {
   });
 
   afterAll(async () => {
-    await pool.query("DELETE FROM memories WHERE owner_id = $1", [ownerId]);
-    await pool.query("DELETE FROM loop_runs WHERE owner_id = $1", [ownerId]);
-    await pool.query("DELETE FROM memory_usage_counters WHERE owner_id = $1", [
-      ownerId,
+    const owners = [ownerId, bypassOwnerId];
+    await pool.query("DELETE FROM memories WHERE owner_id = ANY($1::text[])", [
+      owners,
     ]);
+    await pool.query("DELETE FROM loop_runs WHERE owner_id = ANY($1::text[])", [
+      owners,
+    ]);
+    await pool.query(
+      "DELETE FROM memory_usage_counters WHERE owner_id = ANY($1::text[])",
+      [owners],
+    );
     await pool.end();
   });
 
@@ -86,8 +94,10 @@ suite("MemoryRepository integration", () => {
       query: "repository tests",
       limit: 10,
     });
-    expect(repoResults).toHaveLength(1);
-    expect(repoResults[0]?.scopeType).toBe("repo");
+    expect(repoResults.results).toHaveLength(1);
+    expect(repoResults.results[0]?.scopeType).toBe("repo");
+    expect(repoResults.scopeTotal).toBe(1);
+    expect(repoResults.matchFilterApplied).toBe(true);
 
     const sessionResults = await repository.searchMemories({
       scopes: ["session"],
@@ -98,8 +108,8 @@ suite("MemoryRepository integration", () => {
       query: "Docker Compose",
       limit: 10,
     });
-    expect(sessionResults).toHaveLength(1);
-    expect(sessionResults[0]?.scopeType).toBe("session");
+    expect(sessionResults.results).toHaveLength(1);
+    expect(sessionResults.results[0]?.scopeType).toBe("session");
 
     const repoOnlyForDocker = await repository.searchMemories({
       scopes: ["repo"],
@@ -107,7 +117,8 @@ suite("MemoryRepository integration", () => {
       query: "Docker Compose",
       limit: 10,
     });
-    expect(repoOnlyForDocker).toHaveLength(0);
+    expect(repoOnlyForDocker.results).toHaveLength(0);
+    expect(repoOnlyForDocker.scopeTotal).toBe(1);
   });
 
   it("deduplicates same normalized memory within scope", async () => {
@@ -297,14 +308,110 @@ suite("MemoryRepository integration", () => {
       importance: 0.2,
       expiresAt: "2020-01-01T00:00:00.000Z",
     });
-    expect(
-      await repository.searchMemories({
-        scopes: ["global"],
-        context: {},
-        query: "already expired",
-        limit: 10,
-      }),
-    ).not.toContainEqual(expect.objectContaining({ id: expired.memory.id }));
+    const expiredSearch = await repository.searchMemories({
+      scopes: ["global"],
+      context: {},
+      query: "already expired",
+      limit: 10,
+    });
+    expect(expiredSearch.results).not.toContainEqual(
+      expect.objectContaining({ id: expired.memory.id }),
+    );
+  });
+
+  it("returns the whole scope while it stays small", async () => {
+    const smallScope = new MemoryRepository(pool, bypassOwnerId, {
+      maxMemoryContentChars: 12_000,
+      maxCheckpointContentChars: 12_000,
+      searchBypassMaxScopeSize: 2,
+    });
+    const repoId = "github.com/example/bypass";
+    await smallScope.storeMemory({
+      scopeType: "repo",
+      context: { repoId },
+      kind: "procedure",
+      title: "Spark job layout",
+      content: "Keep Spark steps in their own module.",
+      tags: [],
+      metadata: {},
+      provenance: {},
+      confidence: null,
+      importance: 0.5,
+      expiresAt: null,
+    });
+
+    const unrelated = await smallScope.searchMemories({
+      scopes: ["repo"],
+      context: { repoId },
+      query: "DMI-15688 daily stats report",
+      limit: 10,
+    });
+    expect(unrelated.results).toHaveLength(1);
+    expect(unrelated.scopeTotal).toBe(1);
+    expect(unrelated.matchFilterApplied).toBe(false);
+
+    for (const suffix of ["a", "b"]) {
+      await smallScope.storeMemory({
+        scopeType: "repo",
+        context: { repoId },
+        kind: "fact",
+        title: `Filler ${suffix}`,
+        content: `Unrelated filler memory ${suffix}.`,
+        tags: [],
+        metadata: {},
+        provenance: {},
+        confidence: null,
+        importance: 0.5,
+        expiresAt: null,
+      });
+    }
+
+    const filtered = await smallScope.searchMemories({
+      scopes: ["repo"],
+      context: { repoId },
+      query: "DMI-15688 daily stats report",
+      limit: 10,
+    });
+    expect(filtered.scopeTotal).toBe(3);
+    expect(filtered.matchFilterApplied).toBe(true);
+    expect(filtered.results).toHaveLength(0);
+  });
+
+  it("derives domain tags on store and update", async () => {
+    const stored = await repository.storeMemory({
+      scopeType: "repo",
+      context: { repoId: "github.com/example/tagging" },
+      kind: "procedure",
+      title: "Spark ETL tests",
+      content: "Run pytest for every Spark ETL step before merge request.",
+      tags: ["convention"],
+      metadata: {},
+      provenance: {},
+      confidence: null,
+      importance: 0.5,
+      expiresAt: null,
+    });
+    expect(stored.memory.tags).toContain("convention");
+    expect(stored.memory.tags).toContain("spark");
+    expect(stored.memory.tags).toContain("etl");
+    expect(stored.memory.tags).toContain("testing");
+
+    const tagSearch = await repository.searchMemories({
+      scopes: ["repo"],
+      context: { repoId: "github.com/example/tagging" },
+      query: "spark",
+      tags: ["etl"],
+      limit: 10,
+    });
+    expect(tagSearch.results.map((memory) => memory.id)).toContain(
+      stored.memory.id,
+    );
+
+    const updated = await repository.updateMemory({
+      id: stored.memory.id,
+      content: "Terraform plan runs before every apply.",
+    });
+    expect(updated.memory.tags).toContain("terraform");
   });
 
   it("forgets a memory by owner-scoped ID", async () => {

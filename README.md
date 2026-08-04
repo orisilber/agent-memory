@@ -10,6 +10,8 @@ over HTTP.
 
 - Global, repository, and conversation-scoped memories
 - Full-text and fuzzy search with PostgreSQL
+- Small scopes returned in full, so early memories stay reachable
+- Canonical domain tags derived from every stored memory
 - Durable loop state and resumable checkpoints
 - Secret redaction before persistence
 - Persistent Docker volume for local data
@@ -92,6 +94,9 @@ Common settings:
 - `MEMORY_OWNER_ID`: owner namespace for stored memories.
 - `MEMORY_API_KEY`: optional API key for the local HTTP endpoint.
 - `SESSION_RETENTION_DAYS`: retention period for session memories and loops.
+- `SEARCH_BYPASS_MAX_SCOPE_SIZE`: scope size up to which search returns every
+  memory ranked instead of only lexical matches; defaults to `50`. Set `0` to
+  always require a match.
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: database credentials and
   name.
 - `POSTGRES_PORT`: host port for PostgreSQL; defaults to `5433`.
@@ -130,6 +135,31 @@ Memory scopes:
 - `repo`: project conventions and decisions identified by repository.
 - `session`: temporary context for one conversation; expires by default after
   two days.
+
+### Search behaviour
+
+`memory_search` always reports `scopeTotal`, the number of active memories the
+searched scopes hold. While a scope holds at most
+`SEARCH_BYPASS_MAX_SCOPE_SIZE` memories, search returns the whole scope ranked
+and sets `matchFilterApplied` to `false`; a narrow query can no longer hide a
+small memory set. Once a scope grows past that size, lexical matching applies
+and an empty result carries a note with `scopeTotal` so the caller can widen the
+query instead of assuming nothing is stored.
+
+### Tags
+
+Stored and updated memories keep their explicit tags and gain canonical domain
+tags derived from title and content, such as `spark`, `airflow`, `terraform`, or
+`testing`. Derived tags feed both the search document and the `tags` filter.
+
+Apply the current tag rules to memories stored before this behaviour existed:
+
+```bash
+cd "${AGENT_MEMORY_HOME:-$HOME/.local/share/agent-memory}"
+npm install
+npm run memory:retag -- --dry-run
+npm run memory:retag
+```
 
 Inspect lifetime usage counters from the installation directory. This optional
 report requires Node.js and npm dependencies:

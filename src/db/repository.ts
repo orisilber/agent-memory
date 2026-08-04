@@ -7,6 +7,7 @@ import {
   resolveScopeIds,
   ScopeValidationError,
 } from "../security/scope.js";
+import { tagsWithDerived } from "../tags.js";
 import type {
   JsonObject,
   LoopCheckpointRecord,
@@ -16,6 +17,7 @@ import type {
   MemoryContext,
   MemoryKind,
   MemoryRecord,
+  MemorySearchResponse,
   MemorySearchResult,
   ScopeType,
   UsageCounter,
@@ -118,7 +120,14 @@ type Limits = {
   maxMemoryContentChars: number;
   maxCheckpointContentChars: number;
   sessionRetentionDays?: number;
+  /**
+   * Scope size at or below which search returns every memory instead of only
+   * lexical matches. Set 0 to always require a match.
+   */
+  searchBypassMaxScopeSize?: number;
 };
+
+export const DEFAULT_SEARCH_BYPASS_MAX_SCOPE_SIZE = 50;
 
 function asIso(value: unknown): string | null {
   if (value === null || value === undefined) {
@@ -249,6 +258,7 @@ function combineRedactions(
 
 export class MemoryRepository {
   private readonly sessionRetentionDays: number;
+  private readonly searchBypassMaxScopeSize: number;
 
   constructor(
     private readonly pool: Pool,
@@ -262,6 +272,16 @@ export class MemoryRepository {
     ) {
       throw new RepositoryValidationError(
         "sessionRetentionDays must be a positive integer",
+      );
+    }
+    this.searchBypassMaxScopeSize =
+      limits.searchBypassMaxScopeSize ?? DEFAULT_SEARCH_BYPASS_MAX_SCOPE_SIZE;
+    if (
+      !Number.isInteger(this.searchBypassMaxScopeSize) ||
+      this.searchBypassMaxScopeSize < 0
+    ) {
+      throw new RepositoryValidationError(
+        "searchBypassMaxScopeSize must be a non-negative integer",
       );
     }
   }
@@ -325,9 +345,11 @@ export class MemoryRepository {
       metadataResult,
       provenanceResult,
     );
-    const tags = tagsResult
-      .map((result) => result.value.trim())
-      .filter((tag) => tag.length > 0);
+    const tags = tagsWithDerived({
+      title: titleResult.value,
+      content: contentResult.value,
+      tags: tagsResult.map((result) => result.value),
+    });
     const metadata = asJsonObject(metadataResult.value);
     const provenance = asJsonObject(provenanceResult.value);
     const expiresAt = this.resolveMemoryExpiry(
@@ -434,9 +456,11 @@ export class MemoryRepository {
       metadataResult,
       provenanceResult,
     );
-    const tags = tagsResults
-      .map((result) => result.value.trim())
-      .filter((tag) => tag.length > 0);
+    const tags = tagsWithDerived({
+      title: titleResult.value,
+      content: contentResult.value,
+      tags: tagsResults.map((result) => result.value),
+    });
     const metadata = asJsonObject(metadataResult.value);
     const provenance = asJsonObject(provenanceResult.value);
     const confidence = input.confidence ?? current.confidence;
@@ -559,12 +583,12 @@ export class MemoryRepository {
 
   async searchMemories(
     input: SearchMemoryInput,
-  ): Promise<MemorySearchResult[]> {
+  ): Promise<MemorySearchResponse> {
     const query = input.query.trim();
     if (!query) {
       await this.trackUsage("search_succeeded");
       await this.trackUsage("search_missed");
-      return [];
+      return { results: [], scopeTotal: 0, matchFilterApplied: true };
     }
     const scopes = resolveScopeIds(input.scopes, input.context);
     const values: unknown[] = [this.ownerId];
@@ -573,19 +597,11 @@ export class MemoryRepository {
       const scopeIdIndex = values.push(scopeId);
       return `(scope_type = $${scopeTypeIndex}::memory_scope AND scope_id = $${scopeIdIndex})`;
     });
-    const queryIndex = values.push(query);
     const where = [
       "owner_id = $1",
       "archived_at IS NULL",
       "(expires_at IS NULL OR expires_at > now())",
       `(${scopeClauses.join(" OR ")})`,
-      `(
-        search_document @@ websearch_to_tsquery('simple', $${queryIndex}::text)
-        OR title % $${queryIndex}::text
-        OR content % $${queryIndex}::text
-        OR title ILIKE '%' || $${queryIndex}::text || '%'
-        OR content ILIKE '%' || $${queryIndex}::text || '%'
-      )`,
     ];
 
     if (input.kind) {
@@ -595,6 +611,19 @@ export class MemoryRepository {
     if (input.tags?.length) {
       const tagsIndex = values.push(input.tags);
       where.push(`tags && $${tagsIndex}::text[]`);
+    }
+
+    const scopeTotal = await this.countCandidates(where, [...values]);
+    const matchFilterApplied = scopeTotal > this.searchBypassMaxScopeSize;
+    const queryIndex = values.push(query);
+    if (matchFilterApplied) {
+      where.push(`(
+        search_document @@ websearch_to_tsquery('simple', $${queryIndex}::text)
+        OR title % $${queryIndex}::text
+        OR content % $${queryIndex}::text
+        OR title ILIKE '%' || $${queryIndex}::text || '%'
+        OR content ILIKE '%' || $${queryIndex}::text || '%'
+      )`);
     }
 
     const limitIndex = values.push(input.limit);
@@ -642,7 +671,20 @@ export class MemoryRepository {
       await this.trackUsage("search_missed");
     }
     await this.trackUsage("search_succeeded");
-    return memories;
+    return { results: memories, scopeTotal, matchFilterApplied };
+  }
+
+  private async countCandidates(
+    where: string[],
+    values: unknown[],
+  ): Promise<number> {
+    const result = await this.pool.query(
+      `SELECT count(*)::int AS total FROM memories WHERE ${where.join(
+        "\n          AND ",
+      )}`,
+      values,
+    );
+    return Number(result.rows[0]?.total ?? 0);
   }
 
   async listMemories(input: ListMemoryInput): Promise<MemoryRecord[]> {
