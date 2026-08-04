@@ -13,6 +13,23 @@ export const loopStatusSchema = z.enum([
   "completed",
   "failed",
 ]);
+export const usageMetrics = [
+  "store_succeeded",
+  "store_failed",
+  "update_succeeded",
+  "update_failed",
+  "archive_succeeded",
+  "archive_failed",
+  "forget_succeeded",
+  "forget_failed",
+  "search_succeeded",
+  "search_failed",
+  "search_missed",
+  "list_succeeded",
+  "list_failed",
+  "accessed",
+] as const;
+export const usageMetricSchema = z.enum(usageMetrics);
 
 export const memoryContextSchema = z.object({
   sessionId: z.string().trim().min(1).max(256).optional(),
@@ -24,6 +41,7 @@ export const jsonObjectSchema = z.record(z.string(), z.unknown());
 export type ScopeType = z.infer<typeof scopeTypeSchema>;
 export type MemoryKind = z.infer<typeof memoryKindSchema>;
 export type LoopStatus = z.infer<typeof loopStatusSchema>;
+export type UsageMetric = z.infer<typeof usageMetricSchema>;
 export type MemoryContext = z.infer<typeof memoryContextSchema>;
 export type JsonObject = Record<string, unknown>;
 
@@ -53,6 +71,12 @@ export type MemorySearchResult = MemoryRecord & {
   score: number;
   textScore: number;
   trigramScore: number;
+};
+
+export type UsageCounter = {
+  metric: UsageMetric;
+  count: number;
+  updatedAt: string;
 };
 
 export type LoopRunRecord = {

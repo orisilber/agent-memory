@@ -18,6 +18,8 @@ import type {
   MemoryRecord,
   MemorySearchResult,
   ScopeType,
+  UsageCounter,
+  UsageMetric,
 } from "../types.js";
 
 export class RepositoryValidationError extends Error {
@@ -200,6 +202,14 @@ function rowToCheckpoint(row: QueryResultRow): LoopCheckpointRecord {
   };
 }
 
+function rowToUsageCounter(row: QueryResultRow): UsageCounter {
+  return {
+    metric: row.metric as UsageMetric,
+    count: Number(row.count),
+    updatedAt: asIso(row.updated_at) as string,
+  };
+}
+
 function ensureLength(name: string, value: string, max: number): void {
   if (value.length > max) {
     throw new RepositoryValidationError(
@@ -254,6 +264,39 @@ export class MemoryRepository {
         "sessionRetentionDays must be a positive integer",
       );
     }
+  }
+
+  async incrementUsage(metric: UsageMetric, amount = 1): Promise<void> {
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new RepositoryValidationError(
+        "usage amount must be a positive integer",
+      );
+    }
+
+    await this.pool.query(
+      `
+        INSERT INTO memory_usage_counters (owner_id, metric, count)
+        VALUES ($1, $2::memory_usage_metric, $3)
+        ON CONFLICT (owner_id, metric)
+        DO UPDATE SET
+          count = memory_usage_counters.count + EXCLUDED.count,
+          updated_at = now()
+      `,
+      [this.ownerId, metric, amount],
+    );
+  }
+
+  async getUsage(): Promise<UsageCounter[]> {
+    const result = await this.pool.query(
+      `
+        SELECT metric, count, updated_at
+        FROM memory_usage_counters
+        WHERE owner_id = $1
+        ORDER BY metric
+      `,
+      [this.ownerId],
+    );
+    return result.rows.map(rowToUsageCounter);
   }
 
   async storeMemory(input: StoreMemoryInput): Promise<MemoryWriteResult> {
@@ -335,8 +378,11 @@ export class MemoryRepository {
       ],
     );
 
+    const memory = rowToMemory(result.rows[0]);
+    await this.trackUsage("store_succeeded");
+
     return {
-      memory: rowToMemory(result.rows[0]),
+      memory,
       redacted: redaction.redacted,
       redactionReasons: redaction.reasons,
     };
@@ -448,8 +494,11 @@ export class MemoryRepository {
       throw new RepositoryNotFoundError(`memory ${input.id} not found`);
     }
 
+    const memory = rowToMemory(result.rows[0]);
+    await this.trackUsage("update_succeeded");
+
     return {
-      memory: rowToMemory(result.rows[0]),
+      memory,
       redacted: redaction.redacted,
       redactionReasons: redaction.reasons,
     };
@@ -468,7 +517,9 @@ export class MemoryRepository {
       "DELETE FROM memories WHERE id = $1 AND owner_id = $2",
       [id, this.ownerId],
     );
-    return (result.rowCount ?? 0) > 0;
+    const deleted = (result.rowCount ?? 0) > 0;
+    await this.trackUsage(deleted ? "forget_succeeded" : "forget_failed");
+    return deleted;
   }
 
   async archiveMemory(id: string): Promise<boolean> {
@@ -480,7 +531,9 @@ export class MemoryRepository {
       `,
       [id, this.ownerId],
     );
-    return (result.rowCount ?? 0) > 0;
+    const archived = (result.rowCount ?? 0) > 0;
+    await this.trackUsage(archived ? "archive_succeeded" : "archive_failed");
+    return archived;
   }
 
   async cleanupExpired(): Promise<void> {
@@ -509,6 +562,8 @@ export class MemoryRepository {
   ): Promise<MemorySearchResult[]> {
     const query = input.query.trim();
     if (!query) {
+      await this.trackUsage("search_succeeded");
+      await this.trackUsage("search_missed");
       return [];
     }
     const scopes = resolveScopeIds(input.scopes, input.context);
@@ -582,7 +637,11 @@ export class MemoryRepository {
         "UPDATE memories SET last_accessed_at = now() WHERE id = ANY($1::uuid[])",
         [memories.map((memory) => memory.id)],
       );
+      await this.trackUsage("accessed", memories.length);
+    } else {
+      await this.trackUsage("search_missed");
     }
+    await this.trackUsage("search_succeeded");
     return memories;
   }
 
@@ -615,7 +674,12 @@ export class MemoryRepository {
       `,
       values,
     );
-    return result.rows.map(rowToMemory);
+    const memories = result.rows.map(rowToMemory);
+    if (memories.length) {
+      await this.trackUsage("accessed", memories.length);
+    }
+    await this.trackUsage("list_succeeded");
+    return memories;
   }
 
   async startLoop(input: StartLoopInput): Promise<LoopRunRecord> {
@@ -850,6 +914,16 @@ export class MemoryRepository {
       throw new RepositoryNotFoundError(`loop run ${input.runId} not found`);
     }
     return rowToLoopRun(result.rows[0]);
+  }
+
+  private async trackUsage(metric: UsageMetric, amount = 1): Promise<void> {
+    try {
+      await this.incrementUsage(metric, amount);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown usage tracking error";
+      console.error(`Usage tracking failed for ${metric}: ${message}`);
+    }
   }
 
   private resolveScope(scopeType: ScopeType, context: MemoryContext): string {

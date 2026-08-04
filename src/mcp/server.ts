@@ -12,6 +12,7 @@ import {
   memoryKindSchema,
   scopeTypeSchema,
 } from "../types.js";
+import type { UsageMetric } from "../types.js";
 
 const contextShape = {
   sessionId: z
@@ -62,6 +63,20 @@ function errorResult(error: unknown) {
       },
     ],
   };
+}
+
+async function trackUsage(
+  repository: MemoryRepository,
+  metric: UsageMetric,
+  amount = 1,
+): Promise<void> {
+  try {
+    await repository.incrementUsage(metric, amount);
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Unknown usage tracking error";
+    console.error(`Usage tracking failed for ${metric}: ${message}`);
+  }
 }
 
 export function createMcpServer(repository: MemoryRepository): McpServer {
@@ -123,6 +138,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
           results,
         });
       } catch (error: unknown) {
+        await trackUsage(repository, "search_failed");
         return errorResult(error);
       }
     },
@@ -182,6 +198,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
           redactionReasons: result.redactionReasons,
         });
       } catch (error: unknown) {
+        await trackUsage(repository, "store_failed");
         return errorResult(error);
       }
     },
@@ -214,6 +231,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
           redactionReasons: result.redactionReasons,
         });
       } catch (error: unknown) {
+        await trackUsage(repository, "update_failed");
         return errorResult(error);
       }
     },
@@ -237,6 +255,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
         const deleted = await repository.forgetMemory(id);
         return textResult({ id, deleted });
       } catch (error: unknown) {
+        await trackUsage(repository, "forget_failed");
         return errorResult(error);
       }
     },
@@ -258,6 +277,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
         const archived = await repository.archiveMemory(id);
         return textResult({ id, archived });
       } catch (error: unknown) {
+        await trackUsage(repository, "archive_failed");
         return errorResult(error);
       }
     },
@@ -286,6 +306,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
         });
         return textResult({ scopes, count: memories.length, memories });
       } catch (error: unknown) {
+        await trackUsage(repository, "list_failed");
         return errorResult(error);
       }
     },

@@ -55,9 +55,17 @@ npm install
 npm run build
 npm test
 RUN_INTEGRATION_TESTS=1 npm test
+npm run memory:usage
 ```
 
 Integration tests use local PostgreSQL at port `5433` by default.
+
+`memory:usage` prints lifetime operation counters for configured
+`MEMORY_OWNER_ID`. When using the Docker Compose database from the host:
+
+```bash
+DATABASE_URL=postgresql://memory:memory@localhost:5433/agent_memory npm run memory:usage
+```
 
 ## MCP tools
 

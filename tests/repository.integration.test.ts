@@ -25,6 +25,9 @@ suite("MemoryRepository integration", () => {
   afterAll(async () => {
     await pool.query("DELETE FROM memories WHERE owner_id = $1", [ownerId]);
     await pool.query("DELETE FROM loop_runs WHERE owner_id = $1", [ownerId]);
+    await pool.query("DELETE FROM memory_usage_counters WHERE owner_id = $1", [
+      ownerId,
+    ]);
     await pool.end();
   });
 
@@ -139,6 +142,73 @@ suite("MemoryRepository integration", () => {
     expect(second.memory.title).toBe("Updated title");
     expect(second.memory.tags).toEqual(["updated"]);
     expect(second.memory.importance).toBe(0.9);
+  });
+
+  it("tracks lifetime memory usage counters atomically", async () => {
+    await pool.query("DELETE FROM memory_usage_counters WHERE owner_id = $1", [
+      ownerId,
+    ]);
+    const suffix = randomUUID();
+    const sessionId = `usage-session-${suffix}`;
+    const stored = await repository.storeMemory({
+      scopeType: "session",
+      context: { sessionId },
+      kind: "fact",
+      title: `Usage test ${suffix}`,
+      content: `Track usage for ${suffix}.`,
+      tags: [],
+      metadata: {},
+      provenance: {},
+      confidence: null,
+      importance: 0.5,
+      expiresAt: null,
+    });
+
+    await repository.searchMemories({
+      scopes: ["session"],
+      context: { sessionId },
+      query: suffix,
+      limit: 10,
+    });
+    await repository.searchMemories({
+      scopes: ["session"],
+      context: { sessionId },
+      query: "qzxvjkmp",
+      limit: 10,
+    });
+    await repository.listMemories({
+      scopes: ["session"],
+      context: { sessionId },
+      limit: 10,
+    });
+    await repository.updateMemory({
+      id: stored.memory.id,
+      title: `Updated usage test ${suffix}`,
+    });
+    expect(await repository.archiveMemory(stored.memory.id)).toBe(true);
+    expect(await repository.forgetMemory(stored.memory.id)).toBe(true);
+    expect(await repository.forgetMemory(randomUUID())).toBe(false);
+
+    await Promise.all([
+      repository.incrementUsage("accessed"),
+      repository.incrementUsage("accessed"),
+    ]);
+
+    const counters = new Map(
+      (await repository.getUsage()).map((counter) => [
+        counter.metric,
+        counter.count,
+      ]),
+    );
+    expect(counters.get("store_succeeded")).toBe(1);
+    expect(counters.get("update_succeeded")).toBe(1);
+    expect(counters.get("archive_succeeded")).toBe(1);
+    expect(counters.get("forget_succeeded")).toBe(1);
+    expect(counters.get("forget_failed")).toBe(1);
+    expect(counters.get("search_succeeded")).toBe(2);
+    expect(counters.get("search_missed")).toBe(1);
+    expect(counters.get("list_succeeded")).toBe(1);
+    expect(counters.get("accessed")).toBe(4);
   });
 
   it("resumes and finishes loop checkpoints", async () => {
