@@ -5,6 +5,8 @@ set -Eeuo pipefail
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_DIR="${CURSOR_CONFIG_DIR:-$HOME/.cursor}"
 CURSOR_SKILLS_DIR="$CURSOR_DIR/skills"
+CURSOR_RULES_DIR="$CURSOR_DIR/rules"
+MEMORY_RULE_SOURCE="$PROJECT_ROOT/.cursor/rules/agent-memory.mdc"
 MCP_CONFIG="$CURSOR_DIR/mcp.json"
 MCP_URL="${MEMORY_MCP_URL:-http://127.0.0.1:8787/mcp}"
 HEALTH_URL="${MEMORY_HEALTH_URL:-${MCP_URL%/mcp}/health}"
@@ -165,12 +167,14 @@ if [[ ! -f .env ]]; then
   echo "Created .env from .env.example"
 fi
 
-mkdir -p "$CURSOR_SKILLS_DIR"
+mkdir -p "$CURSOR_SKILLS_DIR" "$CURSOR_RULES_DIR"
 for skill in .cursor/skills/*; do
   [[ -d "$skill" ]] || continue
   cp -R "$skill" "$CURSOR_SKILLS_DIR/"
 done
 echo "Installed Cursor skills: $CURSOR_SKILLS_DIR"
+cp "$MEMORY_RULE_SOURCE" "$CURSOR_RULES_DIR/agent-memory.mdc"
+echo "Installed Cursor rule: $CURSOR_RULES_DIR/agent-memory.mdc"
 
 docker compose up -d --build
 

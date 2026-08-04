@@ -5,6 +5,7 @@ set -Eeuo pipefail
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_DIR="${CURSOR_CONFIG_DIR:-$HOME/.cursor}"
 CURSOR_SKILLS_DIR="$CURSOR_DIR/skills"
+CURSOR_RULES_DIR="$CURSOR_DIR/rules"
 MCP_CONFIG="$CURSOR_DIR/mcp.json"
 KEEP_DATA=false
 KEEP_CONFIG=false
@@ -15,7 +16,7 @@ usage() {
 Usage: scripts/uninstall.sh [options]
 
 Default: stop Docker services, delete Docker volumes and memories, remove
-agent-memory Cursor skills, remove its MCP entry, and delete local .env.
+agent-memory Cursor skills/rule, remove its MCP entry, and delete local .env.
 
 Options:
   --keep-data      Keep Docker volume and stored memories
@@ -79,6 +80,8 @@ for skill_name in memory-admin memory-capture memory-loop memory-recall; do
   rm -rf -- "$CURSOR_SKILLS_DIR/$skill_name"
 done
 echo "Removed agent-memory Cursor skills."
+rm -f -- "$CURSOR_RULES_DIR/agent-memory.mdc"
+echo "Removed agent-memory Cursor rule."
 
 if [[ -f "$MCP_CONFIG" ]]; then
   if command -v python3 >/dev/null 2>&1; then

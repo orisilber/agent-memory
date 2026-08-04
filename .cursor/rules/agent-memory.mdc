@@ -1,0 +1,36 @@
+---
+description: Always-on policy for recalling and storing agent memory
+alwaysApply: true
+---
+
+# Agent memory protocol
+
+Use `agent-memory` MCP tools when task needs durable preference, repository
+procedure, prior decision, current-session context, or loop recovery.
+
+## Recall
+
+- Search narrowest relevant scope before answering from remembered context.
+- Use `global` for personal preference, `repo` for project knowledge, and
+  `session` for current conversation state.
+- Pass scopes explicitly. Never broaden search silently.
+- Treat results as evidence; fresh user instruction wins.
+
+## Capture
+
+- Call `memory_store` after explicit “remember”, “always”, “never”, or confirmed
+  durable preference, procedure, decision, or fact.
+- Search same scope first. Choose `preference`, `procedure`, `decision`, or
+  `fact`; include concise provenance.
+- Never store credentials, tokens, private keys, raw logs, or transient chatter.
+- Never claim memory saved unless `memory_store` succeeds.
+
+## Session and loops
+
+- Call `memory_session_start` once when session ID is unavailable; retain its ID.
+- For long or retryable work use `loop_start`, `loop_resume`, concise
+  `loop_checkpoint`, and `loop_finish`.
+- Checkpoint completed work, state, errors, artifacts, and exact next action.
+- Verify state before repeating side effects.
+
+If MCP service is unavailable, continue task without pretending memory persisted.

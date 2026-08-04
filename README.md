@@ -28,9 +28,9 @@ After cloning repository:
 ./scripts/install.sh
 ```
 
-Installer creates `.env`, starts Docker, installs global Cursor skills, and
-merges `agent-memory` into `~/.cursor/mcp.json`. Use `--skip-mcp` to leave
-Cursor configuration unchanged.
+Installer creates `.env`, starts Docker, installs global Cursor skills/rule,
+and merges `agent-memory` into `~/.cursor/mcp.json`. Use `--skip-mcp` to leave
+MCP configuration unchanged.
 
 Remove installation and stored memories:
 
@@ -43,6 +43,9 @@ for `DELETE` confirmation before removing data.
 
 Cursor setup, skill installation, scope rules, and backups:
 [`docs/cursor-setup.md`](docs/cursor-setup.md)
+
+Always-on memory policy source:
+`.cursor/rules/agent-memory.mdc` (installer copies to `~/.cursor/rules/`)
 
 ## Development
 

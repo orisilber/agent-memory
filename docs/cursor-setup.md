@@ -9,10 +9,11 @@ After cloning repository:
 ```
 
 Installer creates `.env`, builds/starts Docker, installs skills under
-`~/.cursor/skills/`, and merges local MCP server into `~/.cursor/mcp.json`.
+`~/.cursor/skills/`, installs rule under `~/.cursor/rules/`, and merges local
+MCP server into `~/.cursor/mcp.json`.
 Use `./scripts/install.sh --skip-mcp` to leave Cursor configuration unchanged.
 
-To remove service, skills, MCP entry, `.env`, and stored memories:
+To remove service, skills, rule, MCP entry, `.env`, and stored memories:
 
 ```bash
 ./scripts/uninstall.sh
@@ -81,6 +82,10 @@ cp -R .cursor/skills/memory-* ~/.cursor/skills/
 
 Project-only use: leave skills under `.cursor/skills/` and open this repository
 in Cursor.
+
+This repository includes always-on policy
+`.cursor/rules/agent-memory.mdc`; installer copies it to
+`~/.cursor/rules/agent-memory.mdc` so it applies from other repositories too.
 
 ## Scope rules
 
