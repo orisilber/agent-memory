@@ -55,7 +55,7 @@ suite("MemoryRepository integration", () => {
       importance: 0.7,
       expiresAt: null,
     });
-    await repository.storeMemory({
+    const sessionMemory = await repository.storeMemory({
       scopeType: "session",
       context: { sessionId: "session-a" },
       kind: "fact",
@@ -68,6 +68,14 @@ suite("MemoryRepository integration", () => {
       importance: 0.5,
       expiresAt: null,
     });
+    const sessionExpiry = Date.parse(sessionMemory.memory.expiresAt ?? "");
+    expect(sessionMemory.memory.expiresAt).not.toBeNull();
+    expect(sessionExpiry - Date.now()).toBeGreaterThan(
+      2 * 24 * 60 * 60 * 1000 - 10_000,
+    );
+    expect(sessionExpiry - Date.now()).toBeLessThanOrEqual(
+      2 * 24 * 60 * 60 * 1000 + 1_000,
+    );
 
     const repoResults = await repository.searchMemories({
       scopes: ["repo"],
@@ -139,6 +147,12 @@ suite("MemoryRepository integration", () => {
       repoId: "github.com/example/memory",
       task: "Run integration flow",
     });
+    expect(run.expiresAt).not.toBeNull();
+    expect(Date.parse(run.expiresAt ?? "")).toBeGreaterThan(Date.now());
+    await pool.query(
+      "UPDATE loop_runs SET expires_at = now() + interval '1 hour' WHERE id = $1",
+      [run.id],
+    );
     const checkpoint = await repository.checkpointLoop({
       runId: run.id,
       step: 1,
@@ -158,6 +172,9 @@ suite("MemoryRepository integration", () => {
     expect(resumed?.run.id).toBe(run.id);
     expect(resumed?.checkpoint?.id).toBe(checkpoint.checkpoint.id);
     expect(resumed?.checkpoint?.nextAction).toBe("Run search assertion");
+    expect(
+      Date.parse(resumed?.run.expiresAt ?? "") - Date.now(),
+    ).toBeGreaterThan(24 * 60 * 60 * 1000);
 
     const finished = await repository.finishLoop({
       runId: run.id,

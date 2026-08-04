@@ -65,6 +65,7 @@ export type LoopRunRecord = {
   currentStep: number;
   createdAt: string;
   updatedAt: string;
+  expiresAt: string | null;
   completedAt: string | null;
 };
 

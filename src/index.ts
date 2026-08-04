@@ -13,7 +13,18 @@ async function main(): Promise<void> {
   const repository = new MemoryRepository(pool, config.ownerId, {
     maxMemoryContentChars: config.maxMemoryContentChars,
     maxCheckpointContentChars: config.maxCheckpointContentChars,
+    sessionRetentionDays: config.sessionRetentionDays,
   });
+  await repository.cleanupExpired();
+  const cleanupTimer = setInterval(
+    () => {
+      void repository.cleanupExpired().catch((error: unknown) => {
+        console.error("Expired memory cleanup failed:", error);
+      });
+    },
+    60 * 60 * 1000,
+  );
+  cleanupTimer.unref();
   const { server, closeSessions } = createHttpServer(
     repository,
     config,
@@ -37,6 +48,7 @@ async function main(): Promise<void> {
     }
     closing = true;
     console.log(`Received ${signal}; shutting down.`);
+    clearInterval(cleanupTimer);
     await closeSessions();
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));

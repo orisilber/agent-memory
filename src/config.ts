@@ -23,6 +23,7 @@ const configSchema = z.object({
     .int()
     .positive()
     .default(12_000),
+  SESSION_RETENTION_DAYS: z.coerce.number().int().positive().default(2),
 });
 
 export type Config = {
@@ -34,6 +35,7 @@ export type Config = {
   apiKey?: string;
   maxMemoryContentChars: number;
   maxCheckpointContentChars: number;
+  sessionRetentionDays: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -48,5 +50,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(parsed.MEMORY_API_KEY ? { apiKey: parsed.MEMORY_API_KEY } : {}),
     maxMemoryContentChars: parsed.MAX_MEMORY_CONTENT_CHARS,
     maxCheckpointContentChars: parsed.MAX_CHECKPOINT_CONTENT_CHARS,
+    sessionRetentionDays: parsed.SESSION_RETENTION_DAYS,
   };
 }

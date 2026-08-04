@@ -9,6 +9,7 @@ Local, scoped memory service for Cursor agents.
 - Docker Compose with persistent database volume
 - Global, repository, and session scopes
 - Durable loop runs and checkpoints
+- Session memories and loop state expire after 2 days by default
 
 ## Run
 

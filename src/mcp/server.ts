@@ -75,7 +75,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     {
       title: "Start memory session",
       description:
-        "Create a stable session identifier for this conversation. Keep returned sessionId in agent context and pass it to session-scoped memory and loop tools.",
+        "Create a stable session identifier for this conversation. Keep returned sessionId in agent context and pass it to session-scoped memory and loop tools. Session memories and loop state expire after the configured retention period (2 days by default).",
       inputSchema: {
         repoId: contextShape.repoId,
       },

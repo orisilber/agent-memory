@@ -94,7 +94,8 @@ This repository includes always-on policy
   use normalized repository root when no remote exists.
 - `session`: current conversation or temporary work. Call
   `memory_session_start` once, retain returned `sessionId`, and pass it on
-  every session-scoped call.
+  every session-scoped call. Session memories expire after 2 days by default;
+  set `SESSION_RETENTION_DAYS` to change the retention period.
 
 Search only scopes needed for task. Multi-scope search must list every scope
 explicitly. Never assume global memory overrides current user instructions.
@@ -111,7 +112,8 @@ explicitly. Never assume global memory overrides current user instructions.
 7. Call `loop_finish`.
 
 Checkpoint summaries must contain state, completed work, errors, artifacts, and
-next action. Never store credentials or raw command logs.
+next action. Loop runs and checkpoints expire after the same retention period;
+checkpoint activity refreshes it. Never store credentials or raw command logs.
 
 ## Backup and restore
 

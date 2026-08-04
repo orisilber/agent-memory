@@ -15,6 +15,10 @@ Use for long, retryable, multi-step, or interruption-prone work.
 4. If no active run exists, call `loop_start`.
 5. Read latest checkpoint before repeating any side effect.
 
+Session memories and loop state expire after two days by default. Checkpoint
+activity refreshes loop retention; keep the stable session and run IDs available
+while the loop is active.
+
 ## Checkpoint policy
 
 Call `loop_checkpoint`:

@@ -32,5 +32,7 @@ procedure, prior decision, current-session context, or loop recovery.
   `loop_checkpoint`, and `loop_finish`.
 - Checkpoint completed work, state, errors, artifacts, and exact next action.
 - Verify state before repeating side effects.
+- Session memories and loop state expire after two days by default; checkpoint
+  activity refreshes loop retention.
 
 If MCP service is unavailable, continue task without pretending memory persisted.

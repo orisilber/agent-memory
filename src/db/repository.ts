@@ -115,6 +115,7 @@ export type FinishLoopInput = {
 type Limits = {
   maxMemoryContentChars: number;
   maxCheckpointContentChars: number;
+  sessionRetentionDays?: number;
 };
 
 function asIso(value: unknown): string | null {
@@ -179,6 +180,7 @@ function rowToLoopRun(row: QueryResultRow): LoopRunRecord {
     currentStep: Number(row.current_step),
     createdAt: asIso(row.created_at) as string,
     updatedAt: asIso(row.updated_at) as string,
+    expiresAt: asIso(row.expires_at),
     completedAt: asIso(row.completed_at),
   };
 }
@@ -236,11 +238,23 @@ function combineRedactions(
 }
 
 export class MemoryRepository {
+  private readonly sessionRetentionDays: number;
+
   constructor(
     private readonly pool: Pool,
     private readonly ownerId: string,
     private readonly limits: Limits,
-  ) {}
+  ) {
+    this.sessionRetentionDays = limits.sessionRetentionDays ?? 2;
+    if (
+      !Number.isInteger(this.sessionRetentionDays) ||
+      this.sessionRetentionDays <= 0
+    ) {
+      throw new RepositoryValidationError(
+        "sessionRetentionDays must be a positive integer",
+      );
+    }
+  }
 
   async storeMemory(input: StoreMemoryInput): Promise<MemoryWriteResult> {
     const scopeId = this.resolveScope(input.scopeType, input.context);
@@ -273,7 +287,10 @@ export class MemoryRepository {
       .filter((tag) => tag.length > 0);
     const metadata = asJsonObject(metadataResult.value);
     const provenance = asJsonObject(provenanceResult.value);
-    const expiresAt = parseExpiry(input.expiresAt);
+    const expiresAt = this.resolveMemoryExpiry(
+      input.scopeType,
+      input.expiresAt,
+    );
     const contentHash = hashContent(contentResult.value);
 
     const result = await this.pool.query(
@@ -382,7 +399,7 @@ export class MemoryRepository {
     ensureProbability("importance", importance);
     const expiresAt =
       input.expiresAt === undefined ? current.expiresAt : input.expiresAt;
-    const expiryDate = parseExpiry(expiresAt);
+    const expiryDate = this.resolveMemoryExpiry(current.scopeType, expiresAt);
     const contentHash = hashContent(contentResult.value);
 
     let result;
@@ -464,6 +481,27 @@ export class MemoryRepository {
       [id, this.ownerId],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async cleanupExpired(): Promise<void> {
+    await this.pool.query(
+      `
+        DELETE FROM loop_runs
+        WHERE owner_id = $1
+          AND expires_at IS NOT NULL
+          AND expires_at <= now()
+      `,
+      [this.ownerId],
+    );
+    await this.pool.query(
+      `
+        DELETE FROM memories
+        WHERE owner_id = $1
+          AND expires_at IS NOT NULL
+          AND expires_at <= now()
+      `,
+      [this.ownerId],
+    );
   }
 
   async searchMemories(
@@ -594,11 +632,20 @@ export class MemoryRepository {
     const repoId = input.repoId?.trim() || null;
     const result = await this.pool.query(
       `
-        INSERT INTO loop_runs (id, owner_id, session_id, repo_id, task)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO loop_runs (
+          id, owner_id, session_id, repo_id, task, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
       `,
-      [randomUUID(), this.ownerId, sessionId, repoId, taskResult.value],
+      [
+        randomUUID(),
+        this.ownerId,
+        sessionId,
+        repoId,
+        taskResult.value,
+        this.retentionDate(),
+      ],
     );
     return rowToLoopRun(result.rows[0]);
   }
@@ -659,7 +706,13 @@ export class MemoryRepository {
     );
 
     const run = await this.pool.query(
-      "SELECT id FROM loop_runs WHERE id = $1 AND owner_id = $2",
+      `
+        SELECT id
+        FROM loop_runs
+        WHERE id = $1
+          AND owner_id = $2
+          AND (expires_at IS NULL OR expires_at > now())
+      `,
       [input.runId, this.ownerId],
     );
     if (!run.rowCount) {
@@ -701,10 +754,11 @@ export class MemoryRepository {
         SET current_step = GREATEST(current_step, $1),
             status = 'running',
             updated_at = now(),
-            completed_at = NULL
+            completed_at = NULL,
+            expires_at = $4
         WHERE id = $2 AND owner_id = $3
       `,
-      [input.step, input.runId, this.ownerId],
+      [input.step, input.runId, this.ownerId, this.retentionDate()],
     );
 
     return {
@@ -720,7 +774,9 @@ export class MemoryRepository {
     repoId: string | null,
   ): Promise<LoopResumeResult | null> {
     const values: unknown[] = [this.ownerId];
-    let where = "owner_id = $1 AND status IN ('running', 'paused')";
+    let where =
+      "owner_id = $1 AND status IN ('running', 'paused') " +
+      "AND (expires_at IS NULL OR expires_at > now())";
     if (runId) {
       values.push(runId);
       where += ` AND id = $${values.length}`;
@@ -805,5 +861,27 @@ export class MemoryRepository {
       }
       throw error;
     }
+  }
+
+  private resolveMemoryExpiry(
+    scopeType: ScopeType,
+    value: string | null,
+  ): Date | null {
+    const explicit = parseExpiry(value);
+    if (scopeType !== "session") {
+      return explicit;
+    }
+
+    const sessionLimit = this.retentionDate();
+    if (!explicit || explicit > sessionLimit) {
+      return sessionLimit;
+    }
+    return explicit;
+  }
+
+  private retentionDate(): Date {
+    return new Date(
+      Date.now() + this.sessionRetentionDays * 24 * 60 * 60 * 1000,
+    );
   }
 }
