@@ -20,6 +20,27 @@ curl http://127.0.0.1:8787/health
 
 Service endpoint: `http://127.0.0.1:8787/mcp`.
 
+## Install on another computer
+
+After cloning repository:
+
+```bash
+./scripts/install.sh
+```
+
+Installer creates `.env`, starts Docker, installs global Cursor skills, and
+merges `agent-memory` into `~/.cursor/mcp.json`. Use `--skip-mcp` to leave
+Cursor configuration unchanged.
+
+Remove installation and stored memories:
+
+```bash
+./scripts/uninstall.sh
+```
+
+Use `--keep-data` to stop services while preserving memories. Uninstall asks
+for `DELETE` confirmation before removing data.
+
 Cursor setup, skill installation, scope rules, and backups:
 [`docs/cursor-setup.md`](docs/cursor-setup.md)
 

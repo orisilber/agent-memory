@@ -6,3 +6,13 @@ dist/
 coverage/
 *.log
 .DS_Store
+
+# Local database backups. Keep migrations trackable.
+*.sql
+*.sql.*
+!migrations/
+!migrations/**/*.sql
+*.dump
+*.backup
+*.backup.sql
+backups/

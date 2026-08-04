@@ -1,6 +1,28 @@
 # Cursor setup
 
-## Start service
+## Install
+
+After cloning repository:
+
+```bash
+./scripts/install.sh
+```
+
+Installer creates `.env`, builds/starts Docker, installs skills under
+`~/.cursor/skills/`, and merges local MCP server into `~/.cursor/mcp.json`.
+Use `./scripts/install.sh --skip-mcp` to leave Cursor configuration unchanged.
+
+To remove service, skills, MCP entry, `.env`, and stored memories:
+
+```bash
+./scripts/uninstall.sh
+```
+
+Installer asks for `DELETE` confirmation. Use `./scripts/uninstall.sh --yes`
+for automation, or `./scripts/uninstall.sh --keep-data` to preserve memories.
+Add `--keep-config` to preserve local `.env`.
+
+## Start service manually
 
 From project root:
 
