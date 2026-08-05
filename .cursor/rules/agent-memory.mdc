@@ -27,7 +27,10 @@ procedure, prior decision, current-session context, or loop recovery.
 
 ## Session and loops
 
-- Call `memory_session_start` once when session ID is unavailable; retain its ID.
+- Prefer explicit `sessionId` when available. If omitted, session-scoped tools
+  use the active MCP transport session automatically.
+- Call `memory_session_start` only when you need a stable ID outside the current
+  MCP session, or to learn the effective session ID.
 - For long or retryable work use `loop_start`, `loop_resume`, concise
   `loop_checkpoint`, and `loop_finish`.
 - Checkpoint completed work, state, errors, artifacts, and exact next action.

@@ -38,7 +38,9 @@ export function resolveScopeId(
   }
 
   if (!context.sessionId) {
-    throw new ScopeValidationError("session scope requires sessionId");
+    throw new ScopeValidationError(
+      "session scope requires sessionId (pass sessionId, or call tools over an active MCP session so the transport session can be used)",
+    );
   }
   return context.sessionId;
 }

@@ -92,9 +92,10 @@ This repository includes always-on policy
 - `global`: personal preference or reusable procedure. No context required.
 - `repo`: project convention or decision. Pass canonical git remote as `repoId`;
   use normalized repository root when no remote exists.
-- `session`: current conversation or temporary work. Call
-  `memory_session_start` once, retain returned `sessionId`, and pass it on
-  every session-scoped call. Session memories expire after 2 days by default;
+- `session`: current conversation or temporary work. `sessionId` optional when
+  tools run over an active MCP session; server falls back to the MCP transport
+  session ID. Call `memory_session_start` only when you need an explicit ID
+  outside that MCP session. Session memories expire after 2 days by default;
   set `SESSION_RETENTION_DAYS` to change the retention period.
 
 Search only scopes needed for task. Multi-scope search must list every scope
@@ -102,7 +103,8 @@ explicitly. Never assume global memory overrides current user instructions.
 
 ## Loop rules
 
-1. Call `memory_session_start`.
+1. Omit `sessionId` when MCP session is active, or call `memory_session_start`
+   for an explicit ID.
 2. Call `loop_start` with task and repository context.
 3. Call `loop_resume` after reconnect or interruption.
 4. Save short `loop_checkpoint` after meaningful work and before retryable side

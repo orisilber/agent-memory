@@ -23,6 +23,7 @@ last safety net, not permission to send secrets.
    - `global` for personal preference or cross-project procedure.
    - `repo` for repository convention, decision, or how-to.
    - `session` for current conversation facts that should not become durable.
+     Omit `sessionId` when calling through MCP; transport session is used.
 3. Choose kind: `preference`, `procedure`, `decision`, or `fact`.
 4. Write concise content. Include conditions and exceptions.
 5. Add provenance and tags.

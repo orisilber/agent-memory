@@ -12,7 +12,12 @@ import {
   memoryKindSchema,
   scopeTypeSchema,
 } from "../types.js";
-import type { UsageMetric } from "../types.js";
+import type { MemoryContext, UsageMetric } from "../types.js";
+
+export type McpServerOptions = {
+  /** Stable MCP transport session; used when tools omit sessionId. */
+  getMcpSessionId?: () => string | undefined;
+};
 
 const contextShape = {
   sessionId: z
@@ -21,7 +26,9 @@ const contextShape = {
     .min(1)
     .max(256)
     .optional()
-    .describe("Current conversation/session identifier"),
+    .describe(
+      "Conversation/session identifier. Optional when MCP transport session exists; server falls back to that ID.",
+    ),
   repoId: z
     .string()
     .trim()
@@ -30,6 +37,18 @@ const contextShape = {
     .optional()
     .describe("Canonical git remote or repository-root fallback"),
 };
+
+export function resolveMemoryContext(
+  context: { sessionId?: string; repoId?: string },
+  getMcpSessionId?: () => string | undefined,
+): MemoryContext {
+  const sessionId = context.sessionId?.trim() || getMcpSessionId?.()?.trim();
+  const repoId = context.repoId?.trim();
+  return {
+    ...(sessionId ? { sessionId } : {}),
+    ...(repoId ? { repoId } : {}),
+  };
+}
 
 function textResult(payload: unknown) {
   return {
@@ -79,28 +98,35 @@ async function trackUsage(
   }
 }
 
-export function createMcpServer(repository: MemoryRepository): McpServer {
+export function createMcpServer(
+  repository: MemoryRepository,
+  options: McpServerOptions = {},
+): McpServer {
   const server = new McpServer({
     name: "agent-memory",
     version: "0.1.0",
   });
+  const getMcpSessionId = options.getMcpSessionId;
 
   server.registerTool(
     "memory_session_start",
     {
       title: "Start memory session",
       description:
-        "Create a stable session identifier for this conversation. Keep returned sessionId in agent context and pass it to session-scoped memory and loop tools. Session memories and loop state expire after the configured retention period (2 days by default).",
+        "Return a stable session identifier for this conversation. Prefer the active MCP transport session when present so session-scoped tools work without repeating sessionId. Otherwise mint a new ID. Keep returned sessionId when calling tools outside this MCP session. Session memories and loop state expire after the configured retention period (2 days by default).",
       inputSchema: {
         repoId: contextShape.repoId,
       },
     },
-    async ({ repoId }) =>
-      textResult({
-        sessionId: randomUUID(),
+    async ({ repoId }) => {
+      const mcpSessionId = getMcpSessionId?.()?.trim();
+      return textResult({
+        sessionId: mcpSessionId || randomUUID(),
+        reusedMcpSession: Boolean(mcpSessionId),
         repoId: repoId ?? null,
         startedAt: new Date().toISOString(),
-      }),
+      });
+    },
   );
 
   server.registerTool(
@@ -108,7 +134,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     {
       title: "Search memories",
       description:
-        "Search explicit memory scopes for preferences, procedures, decisions, or facts. Choose scopes deliberately; repo scope needs repoId, session scope needs sessionId. Search never broadens scope silently. Every response reports scopeTotal, the number of memories the scopes hold; when a scope is small enough the whole scope is returned ranked and matchFilterApplied is false, so treat results as scope context rather than query matches.",
+        "Search explicit memory scopes for preferences, procedures, decisions, or facts. Choose scopes deliberately; repo scope needs repoId. Session scope uses sessionId when provided, otherwise the active MCP transport session. Search never broadens scope silently. Every response reports scopeTotal, the number of memories the scopes hold; when a scope is small enough the whole scope is returned ranked and matchFilterApplied is false, so treat results as scope context rather than query matches.",
       inputSchema: {
         query: z.string().trim().min(1).max(500),
         scopes: z
@@ -123,11 +149,15 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     },
     async ({ query, scopes, sessionId, repoId, kind, tags, limit }) => {
       try {
+        const context = resolveMemoryContext(
+          { sessionId, repoId },
+          getMcpSessionId,
+        );
         const { results, scopeTotal, matchFilterApplied } =
           await repository.searchMemories({
             query,
             scopes,
-            context: { sessionId, repoId },
+            context,
             ...(kind ? { kind } : {}),
             ...(tags ? { tags } : {}),
             limit,
@@ -135,6 +165,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
         return textResult({
           query,
           scopes,
+          sessionId: context.sessionId ?? null,
           count: results.length,
           scopeTotal,
           matchFilterApplied,
@@ -189,9 +220,13 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
       expiresAt,
     }) => {
       try {
+        const context = resolveMemoryContext(
+          { sessionId, repoId },
+          getMcpSessionId,
+        );
         const result = await repository.storeMemory({
           scopeType: scope,
-          context: { sessionId, repoId },
+          context,
           kind,
           title,
           content,
@@ -204,6 +239,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
         });
         return textResult({
           memory: result.memory,
+          sessionId: context.sessionId ?? null,
           redacted: result.redacted,
           redactionReasons: result.redactionReasons,
         });
@@ -298,7 +334,7 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     {
       title: "List memories",
       description:
-        "List active memories in explicit scopes for review or export. Choose scopes deliberately; repo scope needs repoId, session scope needs sessionId.",
+        "List active memories in explicit scopes for review or export. Choose scopes deliberately; repo scope needs repoId. Session scope uses sessionId when provided, otherwise the active MCP transport session.",
       inputSchema: {
         scopes: z.array(scopeTypeSchema).min(1),
         ...contextShape,
@@ -308,13 +344,22 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     },
     async ({ scopes, sessionId, repoId, kind, limit }) => {
       try {
+        const context = resolveMemoryContext(
+          { sessionId, repoId },
+          getMcpSessionId,
+        );
         const memories = await repository.listMemories({
           scopes,
-          context: { sessionId, repoId },
+          context,
           ...(kind ? { kind } : {}),
           limit,
         });
-        return textResult({ scopes, count: memories.length, memories });
+        return textResult({
+          scopes,
+          sessionId: context.sessionId ?? null,
+          count: memories.length,
+          memories,
+        });
       } catch (error: unknown) {
         await trackUsage(repository, "list_failed");
         return errorResult(error);
@@ -327,21 +372,30 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     {
       title: "Start memory loop",
       description:
-        "Start durable loop state for a task. Call before repeated or retryable work; keep sessionId stable for resume.",
+        "Start durable loop state for a task. Call before repeated or retryable work. sessionId optional when MCP transport session exists; keep it stable for resume.",
       inputSchema: {
-        sessionId: z.string().trim().min(1).max(256),
+        sessionId: contextShape.sessionId,
         repoId: contextShape.repoId,
         task: z.string().trim().min(1).max(50_000),
       },
     },
     async ({ sessionId, repoId, task }) => {
       try {
+        const context = resolveMemoryContext(
+          { sessionId, repoId },
+          getMcpSessionId,
+        );
+        if (!context.sessionId) {
+          throw new RepositoryValidationError(
+            "loop_start requires sessionId or an active MCP session",
+          );
+        }
         const run = await repository.startLoop({
-          sessionId,
-          repoId: repoId ?? null,
+          sessionId: context.sessionId,
+          repoId: context.repoId ?? null,
           task,
         });
-        return textResult({ run });
+        return textResult({ run, sessionId: context.sessionId });
       } catch (error: unknown) {
         return errorResult(error);
       }
@@ -384,21 +438,34 @@ export function createMcpServer(repository: MemoryRepository): McpServer {
     {
       title: "Resume memory loop",
       description:
-        "Load latest active loop and checkpoint. Verify current state before repeating any side effect. Pass runId for exact resume, or sessionId plus repoId for latest matching run.",
+        "Load latest active loop and checkpoint. Verify current state before repeating any side effect. Pass runId for exact resume, or sessionId plus repoId for latest matching run. sessionId optional when MCP transport session exists.",
       inputSchema: {
         runId: z.string().uuid().optional(),
-        sessionId: z.string().trim().min(1).max(256),
+        sessionId: contextShape.sessionId,
         repoId: contextShape.repoId,
       },
     },
     async ({ runId, sessionId, repoId }) => {
       try {
+        const context = resolveMemoryContext(
+          { sessionId, repoId },
+          getMcpSessionId,
+        );
+        if (!context.sessionId) {
+          throw new RepositoryValidationError(
+            "loop_resume requires sessionId or an active MCP session",
+          );
+        }
         const result = await repository.resumeLoop(
           runId ?? null,
-          sessionId,
-          repoId ?? null,
+          context.sessionId,
+          context.repoId ?? null,
         );
-        return textResult({ found: Boolean(result), ...result });
+        return textResult({
+          found: Boolean(result),
+          sessionId: context.sessionId,
+          ...result,
+        });
       } catch (error: unknown) {
         return errorResult(error);
       }

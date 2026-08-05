@@ -129,7 +129,9 @@ export function createHttpServer(
             sessions.delete(closedSessionId);
           },
         });
-        const mcpServer = createMcpServer(repository);
+        const mcpServer = createMcpServer(repository, {
+          getMcpSessionId: () => transport.sessionId,
+        });
         closeServer = async () => {
           await transport.close();
           await mcpServer.close();

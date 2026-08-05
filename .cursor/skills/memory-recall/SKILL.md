@@ -17,9 +17,10 @@ questions.
 - Search multiple scopes only when needed. Put scopes explicitly in
   `memory_search`; service never broadens scope silently.
 
-Call `memory_session_start` once when current conversation has no stable
-`sessionId`. Keep returned ID in context. For repo scope, derive `repoId` from
-canonical git remote; use repository root only when no remote exists.
+Call `memory_session_start` only when you need a stable ID outside the current
+MCP session. Session-scoped tools fall back to the active MCP transport session
+when `sessionId` is omitted. For repo scope, derive `repoId` from canonical git
+remote; use repository root only when no remote exists.
 
 ## Search behavior
 

@@ -22,7 +22,28 @@ describe("scope resolution", () => {
 
   it("rejects missing scoped context", () => {
     expect(() => resolveScopeId("repo", {})).toThrow(ScopeValidationError);
-    expect(() => resolveScopeId("session", {})).toThrow(ScopeValidationError);
+    expect(() => resolveScopeId("session", {})).toThrow(
+      /session scope requires sessionId/,
+    );
+  });
+});
+
+describe("memory context resolution", () => {
+  it("prefers explicit sessionId over MCP transport session", async () => {
+    const { resolveMemoryContext } = await import("../src/mcp/server.js");
+    expect(
+      resolveMemoryContext(
+        { sessionId: "explicit", repoId: "repo" },
+        () => "mcp-session",
+      ),
+    ).toEqual({ sessionId: "explicit", repoId: "repo" });
+  });
+
+  it("falls back to MCP transport session when sessionId omitted", async () => {
+    const { resolveMemoryContext } = await import("../src/mcp/server.js");
+    expect(resolveMemoryContext({}, () => "mcp-session")).toEqual({
+      sessionId: "mcp-session",
+    });
   });
 });
 

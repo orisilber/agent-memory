@@ -9,7 +9,8 @@ Use for long, retryable, multi-step, or interruption-prone work.
 
 ## Start or resume
 
-1. Call `memory_session_start` if no stable session ID exists.
+1. Call `memory_session_start` only if you need an explicit session ID outside
+   the current MCP session; otherwise omit `sessionId` and rely on MCP fallback.
 2. Derive `repoId` from current git remote when repository context matters.
 3. Call `loop_resume` after reconnect or before continuing interrupted work.
 4. If no active run exists, call `loop_start`.
