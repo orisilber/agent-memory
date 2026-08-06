@@ -83,6 +83,12 @@ cp -R .cursor/skills/memory-* ~/.cursor/skills/
 Project-only use: leave skills under `.cursor/skills/` and open this repository
 in Cursor.
 
+Memoried-loop slash commands and worker stay **project-only** in this repo:
+
+- `.cursor/commands/memoried-loop-plan.md`
+- `.cursor/commands/memoried-loop-start.md`
+- `.cursor/agents/memoried-loop-worker.md`
+
 This repository includes always-on policy
 `.cursor/rules/agent-memory.mdc`; installer copies it to
 `~/.cursor/rules/agent-memory.mdc` so it applies from other repositories too.

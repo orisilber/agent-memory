@@ -46,7 +46,6 @@ suite("MemoryRepository integration", () => {
       kind: "preference",
       title: "Package manager",
       content: "Use pnpm for JavaScript projects.",
-      tags: ["tooling"],
       metadata: {},
       provenance: { source: "test" },
       confidence: 1,
@@ -59,7 +58,6 @@ suite("MemoryRepository integration", () => {
       kind: "procedure",
       title: "Test command",
       content: "Run repository tests with npm run test.",
-      tags: ["testing"],
       metadata: {},
       provenance: { source: "test" },
       confidence: 0.9,
@@ -72,7 +70,6 @@ suite("MemoryRepository integration", () => {
       kind: "fact",
       title: "Current task",
       content: "Current task uses Docker Compose.",
-      tags: ["loop"],
       metadata: {},
       provenance: { source: "test" },
       confidence: 1,
@@ -128,7 +125,6 @@ suite("MemoryRepository integration", () => {
       kind: "decision",
       title: "First title",
       content: "Keep memory content stable.",
-      tags: [],
       metadata: {},
       provenance: {},
       confidence: null,
@@ -141,7 +137,6 @@ suite("MemoryRepository integration", () => {
       kind: "decision",
       title: "Updated title",
       content: "  Keep   memory content stable. ",
-      tags: ["updated"],
       metadata: { source: "second write" },
       provenance: {},
       confidence: 0.8,
@@ -151,7 +146,6 @@ suite("MemoryRepository integration", () => {
 
     expect(second.memory.id).toBe(first.memory.id);
     expect(second.memory.title).toBe("Updated title");
-    expect(second.memory.tags).toEqual(["updated"]);
     expect(second.memory.importance).toBe(0.9);
   });
 
@@ -167,7 +161,6 @@ suite("MemoryRepository integration", () => {
       kind: "fact",
       title: `Usage test ${suffix}`,
       content: `Track usage for ${suffix}.`,
-      tags: [],
       metadata: {},
       provenance: {},
       confidence: null,
@@ -279,7 +272,6 @@ suite("MemoryRepository integration", () => {
       kind: "fact",
       title: "Archived fact",
       content: "This fact is archived after storage.",
-      tags: [],
       metadata: {},
       provenance: {},
       confidence: null,
@@ -301,7 +293,6 @@ suite("MemoryRepository integration", () => {
       kind: "fact",
       title: "Expired fact",
       content: "This fact is already expired.",
-      tags: [],
       metadata: {},
       provenance: {},
       confidence: null,
@@ -332,7 +323,6 @@ suite("MemoryRepository integration", () => {
       kind: "procedure",
       title: "Spark job layout",
       content: "Keep Spark steps in their own module.",
-      tags: [],
       metadata: {},
       provenance: {},
       confidence: null,
@@ -357,7 +347,6 @@ suite("MemoryRepository integration", () => {
         kind: "fact",
         title: `Filler ${suffix}`,
         content: `Unrelated filler memory ${suffix}.`,
-        tags: [],
         metadata: {},
         provenance: {},
         confidence: null,
@@ -377,42 +366,6 @@ suite("MemoryRepository integration", () => {
     expect(filtered.results).toHaveLength(0);
   });
 
-  it("derives domain tags on store and update", async () => {
-    const stored = await repository.storeMemory({
-      scopeType: "repo",
-      context: { repoId: "github.com/example/tagging" },
-      kind: "procedure",
-      title: "Spark ETL tests",
-      content: "Run pytest for every Spark ETL step before merge request.",
-      tags: ["convention"],
-      metadata: {},
-      provenance: {},
-      confidence: null,
-      importance: 0.5,
-      expiresAt: null,
-    });
-    expect(stored.memory.tags).toContain("convention");
-    expect(stored.memory.tags).toContain("spark");
-    expect(stored.memory.tags).toContain("etl");
-    expect(stored.memory.tags).toContain("testing");
-
-    const tagSearch = await repository.searchMemories({
-      scopes: ["repo"],
-      context: { repoId: "github.com/example/tagging" },
-      query: "spark",
-      tags: ["etl"],
-      limit: 10,
-    });
-    expect(tagSearch.results.map((memory) => memory.id)).toContain(
-      stored.memory.id,
-    );
-
-    const updated = await repository.updateMemory({
-      id: stored.memory.id,
-      content: "Terraform plan runs before every apply.",
-    });
-    expect(updated.memory.tags).toContain("terraform");
-  });
 
   it("forgets a memory by owner-scoped ID", async () => {
     const stored = await repository.storeMemory({
@@ -421,7 +374,6 @@ suite("MemoryRepository integration", () => {
       kind: "fact",
       title: "Temporary fact",
       content: "Delete this test memory.",
-      tags: [],
       metadata: {},
       provenance: {},
       confidence: null,

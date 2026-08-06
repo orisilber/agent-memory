@@ -11,7 +11,6 @@ over HTTP.
 - Global, repository, and conversation-scoped memories
 - Full-text and fuzzy search with PostgreSQL
 - Small scopes returned in full, so early memories stay reachable
-- Canonical domain tags derived from every stored memory
 - Durable loop state and resumable checkpoints
 - Secret redaction before persistence
 - Persistent Docker volume for local data
@@ -145,21 +144,6 @@ and sets `matchFilterApplied` to `false`; a narrow query can no longer hide a
 small memory set. Once a scope grows past that size, lexical matching applies
 and an empty result carries a note with `scopeTotal` so the caller can widen the
 query instead of assuming nothing is stored.
-
-### Tags
-
-Stored and updated memories keep their explicit tags and gain canonical domain
-tags derived from title and content, such as `spark`, `airflow`, `terraform`, or
-`testing`. Derived tags feed both the search document and the `tags` filter.
-
-Apply the current tag rules to memories stored before this behaviour existed:
-
-```bash
-cd "${AGENT_MEMORY_HOME:-$HOME/.local/share/agent-memory}"
-npm install
-npm run memory:retag -- --dry-run
-npm run memory:retag
-```
 
 Inspect lifetime usage counters from the installation directory. This optional
 report requires Node.js and npm dependencies:

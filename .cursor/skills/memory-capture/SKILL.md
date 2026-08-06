@@ -26,7 +26,7 @@ last safety net, not permission to send secrets.
      Omit `sessionId` when calling through MCP; transport session is used.
 3. Choose kind: `preference`, `procedure`, `decision`, or `fact`.
 4. Write concise content. Include conditions and exceptions.
-5. Add provenance and tags.
+5. Add provenance.
 6. Use `memory_store`; service deduplicates normalized content.
 7. Tell user what was remembered when user requested capture.
 

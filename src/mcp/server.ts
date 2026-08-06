@@ -143,11 +143,10 @@ export function createMcpServer(
           .describe("Scopes to search: global, repo, session"),
         ...contextShape,
         kind: memoryKindSchema.optional(),
-        tags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
         limit: z.number().int().min(1).max(100).default(10),
       },
     },
-    async ({ query, scopes, sessionId, repoId, kind, tags, limit }) => {
+    async ({ query, scopes, sessionId, repoId, kind, limit }) => {
       try {
         const context = resolveMemoryContext(
           { sessionId, repoId },
@@ -159,7 +158,6 @@ export function createMcpServer(
             scopes,
             context,
             ...(kind ? { kind } : {}),
-            ...(tags ? { tags } : {}),
             limit,
           });
         return textResult({
@@ -173,7 +171,7 @@ export function createMcpServer(
             ? {
                 note:
                   `No memory matched this query, but the searched scopes hold ${scopeTotal} ` +
-                  "memories. Retry with domain keywords or list the scope before assuming nothing is stored.",
+                  "memories. Retry with broader keywords or list the scope before assuming nothing is stored.",
               }
             : {}),
           results,
@@ -190,14 +188,13 @@ export function createMcpServer(
     {
       title: "Store memory",
       description:
-        "Store an explicit preference, stable procedure, decision, or fact. Search first and choose one scope. Service redacts detected secrets and adds canonical domain tags derived from title and content; do not store credentials, tokens, raw logs, or transient chatter.",
+        "Store an explicit preference, stable procedure, decision, or fact. Search first and choose one scope. Service redacts detected secrets; do not store credentials, tokens, raw logs, or transient chatter.",
       inputSchema: {
         scope: scopeTypeSchema,
         ...contextShape,
         kind: memoryKindSchema,
         title: z.string().trim().min(1).max(500),
         content: z.string().trim().min(1).max(50_000),
-        tags: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
         metadata: jsonObjectSchema.default({}),
         provenance: jsonObjectSchema.default({}),
         confidence: z.number().min(0).max(1).nullable().default(null),
@@ -212,7 +209,6 @@ export function createMcpServer(
       kind,
       title,
       content,
-      tags,
       metadata,
       provenance,
       confidence,
@@ -230,7 +226,6 @@ export function createMcpServer(
           kind,
           title,
           content,
-          tags,
           metadata,
           provenance,
           confidence,
@@ -260,7 +255,6 @@ export function createMcpServer(
         id: z.string().uuid(),
         title: z.string().trim().min(1).max(500).optional(),
         content: z.string().trim().min(1).max(50_000).optional(),
-        tags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
         metadata: jsonObjectSchema.optional(),
         provenance: jsonObjectSchema.optional(),
         confidence: z.number().min(0).max(1).nullable().optional(),

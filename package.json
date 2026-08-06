@@ -10,7 +10,6 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:prod": "node dist/db/migrate.js",
     "memory:usage": "tsx scripts/memory-usage.ts",
-    "memory:retag": "tsx scripts/retag-memories.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",

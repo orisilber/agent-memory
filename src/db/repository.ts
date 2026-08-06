@@ -7,7 +7,6 @@ import {
   resolveScopeIds,
   ScopeValidationError,
 } from "../security/scope.js";
-import { tagsWithDerived } from "../tags.js";
 import type {
   JsonObject,
   LoopCheckpointRecord,
@@ -57,7 +56,6 @@ export type StoreMemoryInput = {
   kind: MemoryKind;
   title: string;
   content: string;
-  tags: string[];
   metadata: JsonObject;
   provenance: JsonObject;
   confidence: number | null;
@@ -69,7 +67,6 @@ export type UpdateMemoryInput = {
   id: string;
   title?: string;
   content?: string;
-  tags?: string[];
   metadata?: JsonObject;
   provenance?: JsonObject;
   confidence?: number | null;
@@ -82,7 +79,6 @@ export type SearchMemoryInput = {
   context: MemoryContext;
   query: string;
   kind?: MemoryKind;
-  tags?: string[];
   limit: number;
 };
 
@@ -156,7 +152,6 @@ function rowToMemory(row: QueryResultRow): MemoryRecord {
     kind: row.kind as MemoryKind,
     title: String(row.title),
     content: String(row.content),
-    tags: (row.tags as string[] | null) ?? [],
     metadata: asJsonObject(row.metadata),
     provenance: asJsonObject(row.provenance),
     confidence: row.confidence === null ? null : Number(row.confidence),
@@ -335,21 +330,14 @@ export class MemoryRepository {
 
     ensureProbability("confidence", input.confidence);
     ensureProbability("importance", input.importance);
-    const tagsResult = input.tags.map((tag) => redactText(tag.trim()));
     const metadataResult = redactJson(input.metadata);
     const provenanceResult = redactJson(input.provenance);
     const redaction = combineRedactions(
       titleResult,
       contentResult,
-      ...tagsResult,
       metadataResult,
       provenanceResult,
     );
-    const tags = tagsWithDerived({
-      title: titleResult.value,
-      content: contentResult.value,
-      tags: tagsResult.map((result) => result.value),
-    });
     const metadata = asJsonObject(metadataResult.value);
     const provenance = asJsonObject(provenanceResult.value);
     const expiresAt = this.resolveMemoryExpiry(
@@ -361,18 +349,17 @@ export class MemoryRepository {
     const result = await this.pool.query(
       `
         INSERT INTO memories (
-          id, owner_id, scope_type, scope_id, kind, title, content, tags,
+          id, owner_id, scope_type, scope_id, kind, title, content,
           metadata, provenance, confidence, importance, content_hash, expires_at
         )
         VALUES (
-          $1, $2, $3::memory_scope, $4, $5::memory_kind, $6, $7, $8,
-          $9::jsonb, $10::jsonb, $11, $12, $13, $14
+          $1, $2, $3::memory_scope, $4, $5::memory_kind, $6, $7,
+          $8::jsonb, $9::jsonb, $10, $11, $12, $13
         )
         ON CONFLICT (owner_id, scope_type, scope_id, kind, content_hash)
         DO UPDATE SET
           title = EXCLUDED.title,
           content = EXCLUDED.content,
-          tags = EXCLUDED.tags,
           metadata = EXCLUDED.metadata,
           provenance = EXCLUDED.provenance,
           confidence = EXCLUDED.confidence,
@@ -390,7 +377,6 @@ export class MemoryRepository {
         input.kind,
         titleResult.value,
         contentResult.value,
-        tags,
         JSON.stringify(metadata),
         JSON.stringify(provenance),
         input.confidence,
@@ -434,13 +420,6 @@ export class MemoryRepository {
       throw new RepositoryValidationError("title and content are required");
     }
 
-    const tagsResults =
-      input.tags?.map((tag) => redactText(tag.trim())) ??
-      current.tags.map((tag) => ({
-        value: tag,
-        redacted: false,
-        reasons: [] as string[],
-      }));
     const metadataResult =
       input.metadata === undefined
         ? { value: current.metadata, redacted: false, reasons: [] }
@@ -452,15 +431,9 @@ export class MemoryRepository {
     const redaction = combineRedactions(
       titleResult,
       contentResult,
-      ...tagsResults,
       metadataResult,
       provenanceResult,
     );
-    const tags = tagsWithDerived({
-      title: titleResult.value,
-      content: contentResult.value,
-      tags: tagsResults.map((result) => result.value),
-    });
     const metadata = asJsonObject(metadataResult.value);
     const provenance = asJsonObject(provenanceResult.value);
     const confidence = input.confidence ?? current.confidence;
@@ -479,22 +452,20 @@ export class MemoryRepository {
           UPDATE memories
           SET title = $1,
               content = $2,
-              tags = $3,
-              metadata = $4::jsonb,
-              provenance = $5::jsonb,
-              confidence = $6,
-              importance = $7,
-              content_hash = $8,
-              expires_at = $9,
+              metadata = $3::jsonb,
+              provenance = $4::jsonb,
+              confidence = $5,
+              importance = $6,
+              content_hash = $7,
+              expires_at = $8,
               archived_at = NULL,
               updated_at = now()
-          WHERE id = $10 AND owner_id = $11
+          WHERE id = $9 AND owner_id = $10
           RETURNING *
         `,
         [
           titleResult.value,
           contentResult.value,
-          tags,
           JSON.stringify(metadata),
           JSON.stringify(provenance),
           confidence,
@@ -607,10 +578,6 @@ export class MemoryRepository {
     if (input.kind) {
       const kindIndex = values.push(input.kind);
       where.push(`kind = $${kindIndex}::memory_kind`);
-    }
-    if (input.tags?.length) {
-      const tagsIndex = values.push(input.tags);
-      where.push(`tags && $${tagsIndex}::text[]`);
     }
 
     const scopeTotal = await this.countCandidates(where, [...values]);

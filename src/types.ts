@@ -53,7 +53,6 @@ export type MemoryRecord = {
   kind: MemoryKind;
   title: string;
   content: string;
-  tags: string[];
   metadata: JsonObject;
   provenance: JsonObject;
   confidence: number | null;
