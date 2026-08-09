@@ -48,7 +48,7 @@ The installer:
 
 1. Creates local configuration from `.env.example`.
 2. Builds and starts the Docker services.
-3. Installs Agent Memory skills and rules globally for Cursor.
+3. Installs Agent Memory skills, rules, commands, and subagents globally for Cursor.
 4. Adds the MCP server to `~/.cursor/mcp.json`.
 5. Waits for the health endpoint.
 

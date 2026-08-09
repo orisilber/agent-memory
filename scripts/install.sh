@@ -6,7 +6,8 @@ PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_DIR="${CURSOR_CONFIG_DIR:-$HOME/.cursor}"
 CURSOR_SKILLS_DIR="$CURSOR_DIR/skills"
 CURSOR_RULES_DIR="$CURSOR_DIR/rules"
-MEMORY_RULE_SOURCE="$PROJECT_ROOT/.cursor/rules/agent-memory.mdc"
+CURSOR_COMMANDS_DIR="$CURSOR_DIR/commands"
+CURSOR_AGENTS_DIR="$CURSOR_DIR/agents"
 MCP_CONFIG="$CURSOR_DIR/mcp.json"
 MCP_URL="${MEMORY_MCP_URL:-http://127.0.0.1:8787/mcp}"
 HEALTH_URL="${MEMORY_HEALTH_URL:-${MCP_URL%/mcp}/health}"
@@ -17,7 +18,7 @@ usage() {
 Usage: scripts/install.sh [options]
 
 Options:
-  --skip-mcp    Install Docker service and skills, skip Cursor MCP config
+  --skip-mcp    Install Docker service and Cursor artifacts, skip MCP config
   -h, --help    Show this help
 EOF
 }
@@ -167,14 +168,32 @@ if [[ ! -f .env ]]; then
   echo "Created .env from .env.example"
 fi
 
-mkdir -p "$CURSOR_SKILLS_DIR" "$CURSOR_RULES_DIR"
+mkdir -p "$CURSOR_SKILLS_DIR" "$CURSOR_RULES_DIR" "$CURSOR_COMMANDS_DIR" "$CURSOR_AGENTS_DIR"
+
 for skill in .cursor/skills/*; do
   [[ -d "$skill" ]] || continue
+  rm -rf -- "$CURSOR_SKILLS_DIR/$(basename "$skill")"
   cp -R "$skill" "$CURSOR_SKILLS_DIR/"
 done
 echo "Installed Cursor skills: $CURSOR_SKILLS_DIR"
-cp "$MEMORY_RULE_SOURCE" "$CURSOR_RULES_DIR/agent-memory.mdc"
-echo "Installed Cursor rule: $CURSOR_RULES_DIR/agent-memory.mdc"
+
+for rule in .cursor/rules/*; do
+  [[ -f "$rule" ]] || continue
+  cp "$rule" "$CURSOR_RULES_DIR/"
+done
+echo "Installed Cursor rules: $CURSOR_RULES_DIR"
+
+for command in .cursor/commands/*; do
+  [[ -f "$command" ]] || continue
+  cp "$command" "$CURSOR_COMMANDS_DIR/"
+done
+echo "Installed Cursor commands: $CURSOR_COMMANDS_DIR"
+
+for agent in .cursor/agents/*; do
+  [[ -f "$agent" ]] || continue
+  cp "$agent" "$CURSOR_AGENTS_DIR/"
+done
+echo "Installed Cursor agents: $CURSOR_AGENTS_DIR"
 
 docker compose up -d --build
 

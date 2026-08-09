@@ -70,28 +70,29 @@ If `MEMORY_API_KEY` is set, add header using environment interpolation:
 
 Restart or reload Cursor MCP servers after changing this file.
 
-## Install skills globally
+## Install Cursor artifacts globally
 
-Skills are versioned in this repository. Copy them to user skill storage so
-they surface in every repository:
+Skills, rules, slash commands, and subagents are versioned in this repository.
+`./scripts/install.sh` always copies them into user Cursor storage so they work
+in every project:
 
 ```bash
-mkdir -p ~/.cursor/skills
-cp -R .cursor/skills/memory-* ~/.cursor/skills/
+mkdir -p ~/.cursor/skills ~/.cursor/rules ~/.cursor/commands ~/.cursor/agents
+cp -R .cursor/skills/* ~/.cursor/skills/
+cp .cursor/rules/* ~/.cursor/rules/
+cp .cursor/commands/* ~/.cursor/commands/
+cp .cursor/agents/* ~/.cursor/agents/
 ```
 
-Project-only use: leave skills under `.cursor/skills/` and open this repository
-in Cursor.
+Includes:
 
-Memoried-loop slash commands and worker stay **project-only** in this repo:
+- skills: `memory-admin`, `memory-capture`, `memory-loop`, `memory-recall`
+- rule: `agent-memory.mdc`
+- commands: `/memoried-loop-plan`, `/memoried-loop-start`
+- agent: `memoried-loop-worker`
 
-- `.cursor/commands/memoried-loop-plan.md`
-- `.cursor/commands/memoried-loop-start.md`
-- `.cursor/agents/memoried-loop-worker.md`
-
-This repository includes always-on policy
-`.cursor/rules/agent-memory.mdc`; installer copies it to
-`~/.cursor/rules/agent-memory.mdc` so it applies from other repositories too.
+`./scripts/uninstall.sh` removes those same Cursor artifacts (and by default
+also deletes Docker volumes / memories unless `--keep-data`).
 
 ## Scope rules
 

@@ -6,6 +6,8 @@ PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_DIR="${CURSOR_CONFIG_DIR:-$HOME/.cursor}"
 CURSOR_SKILLS_DIR="$CURSOR_DIR/skills"
 CURSOR_RULES_DIR="$CURSOR_DIR/rules"
+CURSOR_COMMANDS_DIR="$CURSOR_DIR/commands"
+CURSOR_AGENTS_DIR="$CURSOR_DIR/agents"
 MCP_CONFIG="$CURSOR_DIR/mcp.json"
 KEEP_DATA=false
 KEEP_CONFIG=false
@@ -16,7 +18,8 @@ usage() {
 Usage: scripts/uninstall.sh [options]
 
 Default: stop Docker services, delete Docker volumes and memories, remove
-agent-memory Cursor skills/rule, remove its MCP entry, and delete local .env.
+agent-memory Cursor skills/rules/commands/agents, remove its MCP entry, and
+delete local .env.
 
 Options:
   --keep-data      Keep Docker volume and stored memories
@@ -81,7 +84,13 @@ for skill_name in memory-admin memory-capture memory-loop memory-recall; do
 done
 echo "Removed agent-memory Cursor skills."
 rm -f -- "$CURSOR_RULES_DIR/agent-memory.mdc"
-echo "Removed agent-memory Cursor rule."
+echo "Removed agent-memory Cursor rules."
+for command_name in memoried-loop-plan.md memoried-loop-start.md; do
+  rm -f -- "$CURSOR_COMMANDS_DIR/$command_name"
+done
+echo "Removed agent-memory Cursor commands."
+rm -f -- "$CURSOR_AGENTS_DIR/memoried-loop-worker.md"
+echo "Removed agent-memory Cursor agents."
 
 if [[ -f "$MCP_CONFIG" ]]; then
   if command -v python3 >/dev/null 2>&1; then
